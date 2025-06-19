@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { SolanaModule } from "../target/types/solana_module";
-import { SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { SystemProgram, LAMPORTS_PER_SOL, Transaction } from "@solana/web3.js";
 import assert from "assert";
 
 describe("my-transfer-program", () => {
@@ -40,7 +40,7 @@ describe("my-transfer-program", () => {
     const receiverBalanceBefore = await provider.connection.getBalance(receiverWallet.publicKey);
 
     // Llamar a la instrucción transfer_sol de tu programa Anchor
-    const tx = await program.methods
+    /* const tx = await program.methods
       .transferSol(new anchor.BN(amountToTransfer))
       .accounts({
         sender: senderWallet.publicKey,
@@ -48,7 +48,35 @@ describe("my-transfer-program", () => {
         systemProgram: SystemProgram.programId,
       })
       .signers([senderWallet]) // El sender DEBE firmar la transacción
-      .rpc();
+      .rpc(); */
+
+    // version avec le payeur des fees = sender
+    const instruction = await program.methods
+      .transferSol(new anchor.BN(amountToTransfer))
+      .accounts({
+        sender: senderWallet.publicKey,
+        receiver: receiverWallet.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+    
+    const transaction = new Transaction().add(instruction); // créer la transaction à partir de l'instruction
+
+    transaction.feePayer=senderWallet.publicKey;
+
+    transaction.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
+
+    const signers = [senderWallet];
+
+    transaction.sign(...signers);
+
+    const tx = await provider.connection.sendRawTransaction(transaction.serialize());
+    const confirmation = await provider.connection.confirmTransaction({
+      signature: tx,
+      blockhash: transaction.recentBlockhash,
+      lastValidBlockHeight: (await provider.connection.getLatestBlockhash()).lastValidBlockHeight
+    })
+
 
     console.log("Transaction signature", tx);
 
